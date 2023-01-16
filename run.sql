@@ -1,25 +1,23 @@
 -- FUNCTION
 
-CREATE OR REPLACE FUNCTION poems_count(author text) RETURNS int AS
+CREATE OR REPLACE FUNCTION count_words_in_body(poem_name_in text) RETURNS int AS
 $$
 	DECLARE
 		res integer;
 	BEGIN
-		SELECT COUNT(*) INTO res
+		SELECT ARRAY_LENGTH(string_to_array(body, ' '), 1) INTO res
 		FROM poems
-		INNER JOIN authors ON poems.author_id = authors.author_id
-		WHERE authors.author_name = author;
-		
+		WHERE poems.poem_name=poem_name_in;
 		RETURN res;
 	END;
 $$ LANGUAGE 'plpgsql';
 
-SELECT * FROM poems_count('LINA KOSTENKO')
+SELECT * FROM count_words_in_body('The Phoenix and the Turtle')
 
 
 -- PROCEDURE
 
-CREATE OR REPLACE PROCEDURE poems_by_genre(genre text)
+CREATE OR REPLACE PROCEDURE poems_by_author(author_name_in text)
 LANGUAGE plpgsql AS
 $$
 	DECLARE
@@ -28,35 +26,41 @@ $$
 		FOR poem_rec IN
 			SELECT poems.poem_name
 			FROM poems
-			INNER JOIN genres ON poems.genre_id = genres.genre_id
-			WHERE genres.genre_name = genre
+			INNER JOIN authors ON authors.author_id = poems.author_id
+			WHERE authors.author_name=author_name_in
 		LOOP
-			RAISE INFO 'Name: %', poem_rec.poem_name;
+			RAISE INFO 'Name_author: % Name: %', author_name_in, poem_rec.poem_name;
 		END LOOP;
 	END;
-$$
+$$;
 
-CALL poems_by_genre('Love')
+CALL poems_by_author('WILLIAM SHAKESPEARE');
 
 
 -- TRIGGER
 
-CREATE TRIGGER short_name_insert
-AFTER INSERT ON authors
-FOR EACH ROW
-EXECUTE FUNCTION short_name();
+CREATE TABLE logs
+(
+  "name_action" text,
+  "time_action" timestamp without time zone,
+  "user_name" text
+);
 
 
-CREATE OR REPLACE FUNCTION short_name() RETURNS trigger AS
+CREATE OR REPLACE FUNCTION logging_action() RETURNS trigger AS
 $$
+DECLARE
+    ms varchar(256);
 	BEGIN
-		UPDATE authors
-		SET author_name = CONCAT(LEFT(author_name, 1), '. ', SPLIT_PART(author_name, ' ', 2))
-		WHERE authors.author_id = NEW.author_id;
-		RETURN NULL;
+	     INSERT INTO logs(name_action, time_action, user_name) VALUES (TG_OP, CURRENT_DATE, CURRENT_USER);
+		 RETURN NULL;
 	END;
 $$ LANGUAGE 'plpgsql';
 
-SELECT * FROM authors
-INSERT INTO authors (author_name) VALUES ('TARAS SHEVCHENKO')
-SELECT * FROM authors
+CREATE TRIGGER logging
+AFTER INSERT OR UPDATE OR DELETE ON authors
+FOR EACH ROW
+EXECUTE PROCEDURE logging_action();
+
+INSERT INTO authors (author_name) VALUES ('LINA KOSTENKO');
+SELECT * FROM logs;
